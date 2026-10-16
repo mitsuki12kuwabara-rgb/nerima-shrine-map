@@ -124,11 +124,19 @@
   .sheetHandle{display:none}
   @media (max-width:820px){
     .app{flex-direction:column}
-    .side{width:100%;min-width:0;position:fixed;left:0;right:0;bottom:0;top:auto;height:62vh;border-right:none;border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.14);transition:height .18s}
+    .side{width:100%;min-width:0;position:fixed;left:0;right:0;bottom:0;top:auto;height:62vh;display:block;overflow-y:auto;overscroll-behavior:contain;border-right:none;border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.14);transition:height .18s}
     .mapwrap{position:fixed;inset:0}
-    .sheetHandle{display:block;padding:7px 0 2px;text-align:center;touch-action:none;cursor:grab}
+    /* スクロールしても残す：グリップ＋コンパクトタイトル＋タブ（スティッキー固定） */
+    .sheetHandle{display:block;padding:7px 0 2px;text-align:center;touch-action:none;cursor:grab;position:sticky;top:0;z-index:9;background:var(--panel);border-radius:18px 18px 0 0}
     .sheetHandle .grip{display:inline-block;width:42px;height:5px;border-radius:3px;background:#d5cdbe}
-    .head{padding-top:4px}
+    .head{display:contents}                               /* brand と headExtra を side 直下に展開 */
+    .brand{position:sticky;top:var(--stH,24px);z-index:8;background:var(--panel);margin:0;padding:2px 16px 8px;border-bottom:1px solid var(--line)}
+    .brand .sub{display:none}                             /* スマホはコンパクトタイトルのみ残す */
+    .brand .torii{font-size:21px}
+    .brand h1{font-size:15px}
+    .headExtra{padding:10px 16px 2px}                     /* 統計＋検索バー：スクロールで流れる */
+    .tabs{position:sticky;top:var(--stB,64px);z-index:8;background:var(--panel);margin:0;padding:8px 16px 6px}
+    .list{overflow:visible}                               /* 一覧はシート全体スクロールで流す */
     .legToggle{display:flex;align-items:center;justify-content:center}
     .legend{display:none;bottom:70px;right:12px}
     .legend.open{display:block}
@@ -155,11 +163,13 @@
         </div>
         <button class="srcbtn" id="srcBtn">ⓘ 出典</button>
       </div>
-      <div class="stats" id="stats"></div>
-      <div class="searchbar" id="searchBar">
-        <span class="ic">🔍</span>
-        <span class="txt" id="searchTxt">名称・地域・区分でしぼり込む</span>
-        <button class="clr" id="searchClr">×</button>
+      <div class="headExtra">
+        <div class="stats" id="stats"></div>
+        <div class="searchbar" id="searchBar">
+          <span class="ic">🔍</span>
+          <span class="txt" id="searchTxt">名称・地域・区分でしぼり込む</span>
+          <button class="clr" id="searchClr">×</button>
+        </div>
       </div>
     </div>
     <div class="tabs">
@@ -500,12 +510,20 @@ $('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open')
   function animTo(h){side.style.transition='height .2s cubic-bezier(.3,.7,.3,1)';setH(h);setTimeout(()=>side.style.transition='',220);}
 
   const SENS=1.5;   // 追従倍率（大きいほど指の動きに対してシートが軽く動く）
-  let active=false, mode=null, startY=0, startH=0, moved=false, inList=false, onHandle=false, i0=0, lastY=0, lastT=0, vy=0;
+  // スティッキー位置（グリップ下＝タイトル、タイトル下＝タブ）を実寸で設定
+  function setStick(){
+    if(window.innerWidth>820) return;
+    const h=$('sheetHandle').offsetHeight, b=side.querySelector('.brand').offsetHeight;
+    document.documentElement.style.setProperty('--stH', h+'px');
+    document.documentElement.style.setProperty('--stB', (h+b)+'px');
+  }
+  let active=false, mode=null, startY=0, startH=0, moved=false, couple=false, onHandle=false, i0=0, lastY=0, lastT=0, vy=0;
   function start(y,target){
     active=true;mode=null;moved=false;startY=y;startH=curH();side.style.transition='';
     i0=snaps().indexOf(snapNearest(startH));   // 開始時の段階
     lastY=y;lastT=performance.now();vy=0;
-    inList  = !!(target&&target.closest&&target.closest('#list'));
+    const sticky = !!(target&&target.closest&&(target.closest('#sheetHandle')||target.closest('.brand')||target.closest('.tabs')));
+    couple = !sticky;                          // 一覧／統計／検索エリア＝スクロール連動、固定バー＝常にシート
     onHandle= !!(target&&target.closest&&target.closest('#sheetHandle'));
   }
   function move(y,ev){
@@ -515,18 +533,17 @@ $('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open')
     if(mode===null){
       if(Math.abs(dy)<2) return;    // しきい値を軽く（4→2px）
       moved=true;
-      if(!inList){
-        mode='sheet';              // ヘッダー・検索・タブ・ハンドル上 → 常にシート操作
+      if(!couple){
+        mode='sheet';              // タイトル・タブ・ハンドル上 → 常にシート操作
       }else{
-        const expandable=curH()<FULL()-2, atTop=list.scrollTop<=0;
+        const expandable=curH()<FULL()-2, atTop=side.scrollTop<=0;
         if(dy<0 && expandable) mode='sheet';     // 上スワイプ＆まだ伸ばせる
-        else if(dy>0 && atTop) mode='sheet';     // 下スワイプ＆一覧先頭
-        else mode='scroll';                       // 一覧の通常スクロールに任せる
+        else if(dy>0 && atTop) mode='sheet';     // 下スワイプ＆先頭
+        else mode='scroll';                       // シート全体の通常スクロールに任せる
       }
     }
     if(mode==='sheet'){
       if(ev&&ev.cancelable) ev.preventDefault();
-      if(inList) list.scrollTop=0;
       setH(startH - dy*SENS);       // 上に動かす(dy<0)とシートが伸びる（倍率で軽く）
     }
   }
@@ -559,7 +576,8 @@ $('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open')
   handle.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')move(e.clientY,e);});
   handle.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')end();});
 
-  window.addEventListener('resize',()=>{if(window.innerWidth>820)side.style.height='';});
+  window.addEventListener('resize',()=>{if(window.innerWidth>820)side.style.height='';setStick();});
+  setStick();
 })();
 
 render();

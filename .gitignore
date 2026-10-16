@@ -1,0 +1,8 @@
+# ローカル起動用（Web公開には不要）
+start.bat
+
+# 元資料・作業ファイル
+*.xlsx
+server.log
+.DS_Store
+Thumbs.db

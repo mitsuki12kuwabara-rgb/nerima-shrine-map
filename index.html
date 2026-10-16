@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>練馬区 神社・仏閣マップ｜知名度マップ</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" referrerpolicy="no-referrer">
+<style>
+  :root{
+    --bg:#f6f4ef; --panel:#fffdf8; --ink:#2b2824; --sub:#7a736a; --line:#e7e1d6;
+    --accent:#b2472f; --accent2:#c98a1a; --gold:#c98a1a;
+    --shadow:0 6px 24px rgba(60,50,40,.14);
+    --c-unknown:#8e9bb0; --c-mid:#e0a106; --c-fame:#c43a2b; --c-unconf:#b7b2a8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%}
+  button{font-family:inherit;cursor:pointer}
+  .app{display:flex;height:100vh;height:100dvh;overflow:hidden}
+
+  /* ===== 左パネル ===== */
+  .side{width:390px;min-width:390px;background:var(--panel);display:flex;flex-direction:column;border-right:1px solid var(--line);z-index:1200}
+  .head{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand .torii{font-size:26px;line-height:1}
+  .brand h1{font-size:17px;margin:0;letter-spacing:.02em}
+  .brand .sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .srcbtn{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:11px;color:var(--sub);padding:4px 10px}
+  .stats{display:flex;gap:6px;margin-top:10px;font-size:11px}
+  .stats span{background:#f1ece2;border-radius:6px;padding:3px 8px;color:#5f584e}
+  .stats b{color:var(--accent)}
+
+  .searchbar{margin-top:10px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+  .searchbar:active{background:#fcf8f0}
+  .searchbar .ic{font-size:15px}
+  .searchbar .txt{flex:1;font-size:13px;color:var(--sub)}
+  .searchbar .txt.on{color:var(--ink)}
+  .searchbar .clr{display:none;border:none;background:#eee;border-radius:50%;width:20px;height:20px;line-height:18px;text-align:center;color:#888;font-size:13px}
+
+  .tabs{display:flex;gap:6px;padding:10px 16px 0}
+  .tabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px 10px 0 0;padding:9px 6px;font-size:12.5px;color:var(--sub);font-weight:700;border-bottom:none}
+  .tabs button.on{color:var(--accent);background:var(--panel);box-shadow:inset 0 -3px 0 var(--accent)}
+
+  .list{flex:1;overflow:auto;padding:8px 12px 24px}
+  .rankNote{font-size:11px;color:var(--sub);background:#f3efe6;border:1px dashed #ddd3c3;border-radius:8px;padding:8px 10px;margin:6px 2px 10px;line-height:1.5}
+  .rankNote b{color:var(--accent)}
+
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 12px;margin-bottom:8px;display:flex;gap:11px;align-items:flex-start;transition:.12s}
+  .card:hover{border-color:#d8cdb8;box-shadow:0 2px 10px rgba(0,0,0,.05)}
+  .card.active{border-color:var(--accent);box-shadow:0 2px 12px rgba(178,71,47,.18)}
+  .rankbadge{flex:none;width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#5b6472,#8e9bb0);color:#fff;font-weight:800;font-size:15px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+  .card.r1 .rankbadge{background:linear-gradient(135deg,#8a6a12,#d6a52a)}
+  .card.r2 .rankbadge{background:linear-gradient(135deg,#6b6b6b,#a9a9a9)}
+  .card.r3 .rankbadge{background:linear-gradient(135deg,#7a4a24,#b5793f)}
+  .cdot{flex:none;width:14px;height:14px;border-radius:50%;margin-top:4px;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.12)}
+  .cmain{flex:1;min-width:0}
+  .cname{font-size:14px;font-weight:700;line-height:1.35}
+  .cmeta{font-size:11px;color:var(--sub);margin-top:3px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .chip{background:#f1ece2;border-radius:5px;padding:1px 6px;color:#5f584e}
+  .fameWrap{margin-top:7px}
+  .fameLbl{font-size:10.5px;color:var(--sub);display:flex;justify-content:space-between;margin-bottom:3px}
+  .fameBar{height:6px;border-radius:4px;background:#eee;overflow:hidden}
+  .fameBar i{display:block;height:100%;border-radius:4px}
+  .unconf{font-size:10.5px;color:#9a8f55;background:#fbf4dd;border:1px solid #efe3b8;border-radius:5px;padding:1px 6px}
+
+  /* ===== 地図 ===== */
+  .mapwrap{flex:1;position:relative}
+  #map{position:absolute;inset:0;background:#e9e4da}
+  .legend{position:absolute;right:12px;bottom:22px;background:rgba(255,253,248,.95);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:11px;box-shadow:var(--shadow);z-index:800;max-width:180px}
+  .legend h4{margin:0 0 7px;font-size:11.5px;color:var(--ink)}
+  .legbar{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--c-unknown),var(--c-mid),var(--c-fame));margin-bottom:4px}
+  .legend .ends{display:flex;justify-content:space-between;color:var(--sub);font-size:10px}
+  .legend .row{display:flex;align-items:center;gap:6px;margin-top:6px;color:var(--sub)}
+  .legend .row i{width:12px;height:12px;border-radius:50%;flex:none}
+  .legToggle{position:absolute;right:12px;bottom:22px;z-index:801;display:none;background:var(--panel);border:1px solid var(--line);border-radius:50%;width:38px;height:38px;box-shadow:var(--shadow);font-size:16px}
+
+  /* ===== 詳細オーバーレイ ===== */
+  .detail{position:absolute;top:0;right:0;width:400px;max-width:46%;height:100%;background:var(--panel);box-shadow:-8px 0 24px rgba(0,0,0,.12);transform:translateX(105%);transition:transform .26s cubic-bezier(.3,.7,.3,1);z-index:1100;display:flex;flex-direction:column}
+  .detail.open{transform:translateX(0)}
+  .dhead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
+  .dhead .dclose{margin-left:auto;border:none;background:#f1ece2;border-radius:50%;width:30px;height:30px;font-size:16px;color:#6b6358;flex:none}
+  .dbody{flex:1;overflow:auto;padding:16px}
+  .dtitle{font-size:19px;font-weight:800;line-height:1.3}
+  .dcat{font-size:12px;color:var(--sub);margin-top:4px}
+  .block{margin-top:16px}
+  .block h3{font-size:12px;color:var(--accent);margin:0 0 7px;letter-spacing:.04em}
+  .fameBig{display:flex;align-items:center;gap:12px}
+  .fameRing{position:relative;width:58px;height:58px;flex:none}
+  .fameRing b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800}
+  .scoreGrid{display:flex;gap:8px;margin-top:4px}
+  .scoreCell{flex:1;background:#faf6ef;border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center}
+  .scoreCell .v{font-size:19px;font-weight:800;color:var(--accent)}
+  .scoreCell .l{font-size:10px;color:var(--sub);margin-top:2px}
+  .kv{font-size:13px;line-height:1.7}
+  .kv .k{color:var(--sub);font-size:11.5px}
+  .reason{font-size:13px;line-height:1.75;color:#3f3a33;background:#faf6ef;border-radius:10px;padding:11px 13px;border:1px solid var(--line)}
+  .routebtn{display:block;text-align:center;background:var(--accent);color:#fff;text-decoration:none;border-radius:11px;padding:12px;font-weight:700;font-size:14px;margin-top:6px}
+  .routebtn.sub{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  .srcs a{display:block;font-size:12px;color:#2f6db5;word-break:break-all;margin-bottom:5px;text-decoration:none}
+  .srcs a:hover{text-decoration:underline}
+
+  /* ===== モーダル（検索・出典） ===== */
+  .mask{position:fixed;inset:0;background:rgba(40,34,28,.45);z-index:2000;display:none;align-items:center;justify-content:center;padding:18px}
+  .mask.open{display:flex}
+  .modal{background:var(--panel);border-radius:18px;width:100%;max-width:460px;max-height:88vh;overflow:auto;box-shadow:var(--shadow)}
+  .mhead{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center}
+  .mhead h2{font-size:16px;margin:0}
+  .mhead .x{margin-left:auto;border:none;background:#f1ece2;border-radius:50%;width:30px;height:30px;font-size:16px;color:#6b6358}
+  .mbody{padding:16px 18px}
+  .fgroup{margin-bottom:18px}
+  .fgroup label{font-size:12px;font-weight:700;color:var(--ink);display:block;margin-bottom:8px}
+  .tinput{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px 13px;font-size:15px;background:#fff}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chipbtn{border:1px solid var(--line);background:#fff;border-radius:20px;padding:8px 14px;font-size:13px;color:var(--sub)}
+  .chipbtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .range .vals{display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-bottom:4px}
+  .range input[type=range]{width:100%}
+  .mfoot{position:sticky;bottom:0;background:var(--panel);padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:10px}
+  .mfoot .reset{border:1px solid var(--line);background:#fff;border-radius:11px;padding:12px 16px;font-size:13px;color:var(--sub)}
+  .mfoot .go{flex:1;border:none;background:var(--accent);color:#fff;border-radius:11px;padding:12px;font-size:14px;font-weight:700}
+  .srcmodal p{font-size:12.5px;line-height:1.7;color:#4a443c}
+  .srcmodal h3{font-size:13px;margin:16px 0 5px;color:var(--accent)}
+
+  /* ===== スマホ ===== */
+  .sheetHandle{display:none}
+  @media (max-width:820px){
+    .app{flex-direction:column}
+    .side{width:100%;min-width:0;position:fixed;left:0;right:0;bottom:0;top:auto;height:62vh;border-right:none;border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.14);transition:height .18s}
+    .mapwrap{position:fixed;inset:0}
+    .sheetHandle{display:block;padding:7px 0 2px;text-align:center;touch-action:none;cursor:grab}
+    .sheetHandle .grip{display:inline-block;width:42px;height:5px;border-radius:3px;background:#d5cdbe}
+    .head{padding-top:4px}
+    .legToggle{display:flex;align-items:center;justify-content:center}
+    .legend{display:none;bottom:70px;right:12px}
+    .legend.open{display:block}
+    .detail{width:100%;max-width:100%;transform:translateY(100%);transition:transform .26s}
+    .detail.open{transform:translateY(0)}
+    .srcbtn{padding:4px 9px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 左パネル / ボトムシート -->
+  <aside class="side" id="side">
+    <div class="sheetHandle" id="sheetHandle"><span class="grip"></span></div>
+    <div class="head">
+      <div class="brand">
+        <span class="torii">⛩️</span>
+        <div>
+          <h1>練馬区 神社・仏閣マップ</h1>
+          <div class="sub">知名度で色分け・無名ランキング付き</div>
+        </div>
+        <button class="srcbtn" id="srcBtn">ⓘ 出典</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div class="searchbar" id="searchBar">
+        <span class="ic">🔍</span>
+        <span class="txt" id="searchTxt">名称・地域・区分でしぼり込む</span>
+        <button class="clr" id="searchClr">×</button>
+      </div>
+    </div>
+    <div class="tabs">
+      <button id="tabRank" class="on">無名ランキング</button>
+      <button id="tabAll">すべて</button>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <!-- 地図 -->
+  <div class="mapwrap">
+    <div id="map"></div>
+    <button class="legToggle" id="legToggle">🎨</button>
+    <div class="legend" id="legend">
+      <h4>知名度マップ</h4>
+      <div class="legbar"></div>
+      <div class="ends"><span>無名</span><span>有名</span></div>
+      <div class="row"><i style="background:var(--c-unknown)"></i>埋もれた社・祠</div>
+      <div class="row"><i style="background:var(--c-fame)"></i>地域で有名</div>
+      <div class="row"><i style="background:var(--c-unconf);outline:2px dashed #999;outline-offset:1px"></i>未確認</div>
+    </div>
+    <!-- 詳細オーバーレイ（.app直下ではなくmapwrap内。スマホ全画面対応のためJSで制御） -->
+  </div>
+
+  <!-- 詳細（mapwrap外に出すとスマホで親非表示の影響を受けないが、PCは地図右に重ねたいのでapp直下に配置） -->
+  <aside class="detail" id="detail">
+    <div class="dhead">
+      <div>
+        <div class="dtitle" id="dTitle"></div>
+        <div class="dcat" id="dCat"></div>
+      </div>
+      <button class="dclose" id="dClose">×</button>
+    </div>
+    <div class="dbody" id="dBody"></div>
+  </aside>
+</div>
+
+<!-- 検索モーダル -->
+<div class="mask" id="searchMask">
+  <div class="modal">
+    <div class="mhead"><h2>しぼり込み</h2><button class="x" id="searchX">×</button></div>
+    <div class="mbody">
+      <div class="fgroup">
+        <label>キーワード（名称・住所）</label>
+        <input class="tinput" id="qInput" type="search" placeholder="例：氷川、石神井、稲荷">
+      </div>
+      <div class="fgroup">
+        <label>種別</label>
+        <div class="chips" id="groupChips"></div>
+      </div>
+      <div class="fgroup range">
+        <label>知名度のはば</label>
+        <div class="vals"><span id="rmin">無名(0.0)</span><span id="rmax">有名(1.0)</span></div>
+        <input type="range" id="rangeMin" min="0" max="100" value="0">
+        <input type="range" id="rangeMax" min="0" max="100" value="100">
+        <label style="margin-top:12px;font-weight:400;font-size:12px;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="incUnconf" checked> 未確認の社も含める
+        </label>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="reset" id="searchReset">クリア</button>
+      <button class="go" id="searchGo">この条件で見る</button>
+    </div>
+  </div>
+</div>
+
+<!-- 出典モーダル -->
+<div class="mask" id="srcMask">
+  <div class="modal srcmodal">
+    <div class="mhead"><h2>出典・クレジット</h2><button class="x" id="srcX">×</button></div>
+    <div class="mbody">
+      <p>練馬区内の神社・仏閣（祠・地蔵等を含む）を、所在地と「知名度」で地図化したものです。知名度は参拝規模・検索・地図掲載・地域記録などを手がかりにした<b>相対的な推定値</b>（2026年10月15日時点）で、公的な認定ではありません。</p>
+      <h3>地図・ライブラリ</h3>
+      <p>地図タイル：国土地理院「淡色地図」（<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>）／ 地図表示：Leaflet（BSD-2-Clause）／ 経路案内：Google マップ</p>
+      <h3>データ出典</h3>
+      <p>所在地・一覧：練馬区_神社仏閣一覧（本人調査）／ 参照：猫の足あと（tesshow.jp）、ホトカミ、東京都 宗教法人名簿 ほか。各施設の詳細内に出典リンクを掲載しています。</p>
+      <p style="margin-top:14px;color:#9a8f55">※ 商用利用に対応した素材のみで構成しています。</p>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" referrerpolicy="no-referrer"></script>
+<script src="data.js"></script>
+<script>
+/* ========== 知名度 → 色 ========== */
+function lerp(a,b,t){return a+(b-a)*t}
+function hex(c){return '#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}
+const C_LOW=[142,155,176], C_MID=[224,161,6], C_HIGH=[196,58,43];
+function fameColor(v){
+  if(v==null) return getComputedStyle(document.documentElement).getPropertyValue('--c-unconf').trim()||'#b7b2a8';
+  // 0.15〜1.0 を 0〜1 に正規化
+  let t=Math.max(0,Math.min(1,(v-0.15)/(1-0.15)));
+  let a,b,u;
+  if(t<0.5){a=C_LOW;b=C_MID;u=t/0.5}else{a=C_MID;b=C_HIGH;u=(t-0.5)/0.5}
+  return hex([lerp(a[0],b[0],u),lerp(a[1],b[1],u),lerp(a[2],b[2],u)]);
+}
+function fameRadius(v){
+  if(v==null) return 4.5;
+  return 4.5 + Math.max(0,Math.min(1,(v-0.15)/0.85))*8;
+}
+function famePct(v){return v==null?null:Math.round(v*100)}
+function fameWord(v){
+  if(v==null) return '未確認';
+  if(v<=0.2) return 'ほぼ無名';
+  if(v<=0.35) return '地域の人のみ';
+  if(v<=0.55) return '知る人ぞ知る';
+  if(v<=0.75) return 'よく知られる';
+  return '地域で有名';
+}
+
+/* ========== 地図 ========== */
+const map=L.map('map',{zoomControl:true,attributionControl:true}).setView([35.7357,139.6517],13);
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{
+  maxZoom:18, attribution:"<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank'>地理院タイル</a>"
+}).addTo(map);
+
+const markers={};
+SHRINES.forEach(s=>{
+  const m=L.circleMarker([s.lat,s.lon],{
+    radius:fameRadius(s.chimei),
+    fillColor:fameColor(s.chimei),
+    color:s.unconfirmed?'#8a8577':'#ffffff',
+    weight:s.unconfirmed?1.3:1.4,
+    dashArray:s.unconfirmed?'2,2':null,
+    fillOpacity:s.unconfirmed?0.55:0.92
+  });
+  m.on('click',()=>openDetail(s,true));
+  m.addTo(map);
+  markers[s.id||s.name]=m;
+});
+
+/* ========== 状態 ========== */
+let state={tab:'rank', q:'', groups:new Set(), rmin:0, rmax:1, incUnconf:true};
+const GROUPS=['神社・祠','寺院','地蔵・石仏・塚','未確認','その他'];
+let activeKey=null;
+
+const $=id=>document.getElementById(id);
+$('stats').innerHTML = `<span>全 <b>${STATS.total}</b> 件</span><span>確認済 ${STATS.confirmed}</span><span>未確認 ${STATS.unconfirmed}</span>`;
+
+/* ========== 絞り込み ========== */
+function passFilter(s){
+  if(!state.incUnconf && s.unconfirmed) return false;
+  if(state.groups.size && !state.groups.has(s.group)) return false;
+  if(state.q){
+    const q=state.q.toLowerCase();
+    if(!((s.name||'').toLowerCase().includes(q) || (s.addr||'').toLowerCase().includes(q) || (s.cat||'').toLowerCase().includes(q))) return false;
+  }
+  if(!s.unconfirmed){
+    const v=s.chimei==null?0:s.chimei;
+    if(v<state.rmin-1e-9 || v>state.rmax+1e-9) return false;
+  }
+  return true;
+}
+
+function filterActive(){
+  return state.q || state.groups.size || state.rmin>0 || state.rmax<1 || !state.incUnconf;
+}
+
+/* ========== 一覧描画 ========== */
+function cardHTML(s,rank){
+  const col=fameColor(s.chimei);
+  const pct=famePct(s.chimei);
+  const badge = rank ? `<div class="rankbadge">${rank}</div>` : `<span class="cdot" style="background:${col}"></span>`;
+  let fame;
+  if(s.unconfirmed){
+    fame = `<div class="fameWrap"><span class="unconf">知名度 未確認（存在・所在を調査中）</span></div>`;
+  }else{
+    fame = `<div class="fameWrap"><div class="fameLbl"><span>知名度 ${fameWord(s.chimei)}</span><span>${pct}</span></div>`+
+           `<div class="fameBar"><i style="width:${Math.max(6,pct)}%;background:${col}"></i></div></div>`;
+  }
+  const area=(s.addr||'').replace(/^東京都/,'').replace('練馬区','');
+  return `<div class="card ${rank?('r'+rank):''}" data-key="${s.id||s.name}">
+    ${badge}
+    <div class="cmain">
+      <div class="cname">${s.name}</div>
+      <div class="cmeta"><span class="chip">${s.group}</span><span>📍${area}</span></div>
+      ${fame}
+    </div>
+  </div>`;
+}
+
+function render(){
+  const list=$('list');
+  if(state.tab==='rank'){
+    const ranked=SHRINES.filter(s=>s.unknownRank).sort((a,b)=>a.unknownRank-b.unknownRank);
+    list.innerHTML = `<div class="rankNote">練馬区のなかで<b>もっとも知られていない</b>神社・仏閣 ワースト10。知名度が低い（＝参拝・記録・検索がほとんど無い）順に並べています。</div>`
+      + ranked.map(s=>cardHTML(s,s.unknownRank)).join('');
+  }else{
+    let arr=SHRINES.filter(passFilter);
+    arr.sort((a,b)=>{
+      const av=a.chimei==null?2:a.chimei, bv=b.chimei==null?2:b.chimei;
+      return av-bv || a.name.localeCompare(b.name,'ja');
+    });
+    const head = `<div class="rankNote">${filterActive()?'条件に合う':'全'} <b>${arr.length}</b> 件（知名度が低い順）。地図のピンの色＝知名度。</div>`;
+    list.innerHTML = head + (arr.length?arr.map(s=>cardHTML(s,null)).join(''):'<div class="rankNote">該当なし。条件をゆるめてください。</div>');
+  }
+  list.querySelectorAll('.card').forEach(c=>{
+    c.classList.toggle('active', c.dataset.key===activeKey);
+    c.addEventListener('click',()=>{
+      const key=c.dataset.key;
+      const s=SHRINES.find(x=>(x.id||x.name)===key);
+      if(s) openDetail(s,true);
+    });
+  });
+  // 地図のピンも絞り込みに連動（ハイライト）
+  SHRINES.forEach(s=>{
+    const m=markers[s.id||s.name];
+    const show = state.tab==='rank' ? true : passFilter(s);
+    if(m) m.setStyle({opacity:show?1:0.12, fillOpacity: show?(s.unconfirmed?0.55:0.92):0.08});
+  });
+}
+
+/* ========== 詳細 ========== */
+function openDetail(s, fly){
+  activeKey=s.id||s.name;
+  const col=fameColor(s.chimei), pct=famePct(s.chimei);
+  $('dTitle').textContent=s.name;
+  $('dCat').textContent=`${s.group}　/　${s.cat||''}`;
+  const fullAddr=(s.addr||'').startsWith('東京都')?s.addr:('東京都'+s.addr.replace(/^練馬区/,'練馬区'));
+  const dest=encodeURIComponent(fullAddr);
+  let fameBlock;
+  if(s.unconfirmed){
+    fameBlock=`<div class="reason" style="background:#fbf4dd;border-color:#efe3b8;color:#7d7132">この社・仏は<b>存在や所在地を調査中</b>（未確認）です。地図上の位置は町丁目などからの概算で、目安としてご覧ください。</div>`;
+  }else{
+    const deg=pct*3.6;
+    fameBlock=`<div class="fameBig">
+      <div class="fameRing" style="border-radius:50%;background:conic-gradient(${col} ${deg}deg,#eee ${deg}deg)">
+        <span style="position:absolute;inset:6px;background:var(--panel);border-radius:50%"></span>
+        <b style="color:${col}">${pct}</b>
+      </div>
+      <div><div style="font-size:15px;font-weight:800">${fameWord(s.chimei)}</div>
+      <div style="font-size:11.5px;color:var(--sub);margin-top:3px">知名度スコア（相対推定・100点満点）</div></div>
+    </div>
+    <div class="scoreGrid">
+      <div class="scoreCell"><div class="v">${s.sFame??'-'}</div><div class="l">知名度</div></div>
+      <div class="scoreCell"><div class="v">${s.sRecog??'-'}</div><div class="l">認知度</div></div>
+      <div class="scoreCell"><div class="v">${s.sScale??'-'}</div><div class="l">利用規模</div></div>
+    </div>`;
+  }
+  let srcHTML='';
+  if(s.sources&&s.sources.length){
+    srcHTML=`<div class="block"><h3>出典</h3><div class="srcs">`+
+      s.sources.map((u,i)=>`<a href="${u}" target="_blank" rel="noopener">${i+1}. ${u.replace(/^https?:\/\//,'').slice(0,46)}…</a>`).join('')+`</div></div>`;
+  }
+  $('dBody').innerHTML=`
+    <div class="block">${fameBlock}</div>
+    ${s.visitors?`<div class="block"><h3>通常月の参拝めやす</h3><div class="kv">${s.visitors}</div></div>`:''}
+    ${s.reason?`<div class="block"><h3>評価のポイント</h3><div class="reason">${s.reason}</div></div>`:''}
+    <div class="block"><h3>所在地</h3><div class="kv">${s.addr}</div>
+      <a class="routebtn" href="https://www.google.com/maps/dir/?api=1&destination=${dest}" target="_blank" rel="noopener">現在地からの道順（Googleマップ）</a>
+      <a class="routebtn sub" href="https://www.google.com/maps/search/?api=1&query=${dest}" target="_blank" rel="noopener">地図で場所を見る</a>
+    </div>
+    ${srcHTML}
+  `;
+  $('detail').classList.add('open');
+  if(fly && isFinite(s.lat)){
+    map.setView([s.lat,s.lon], Math.max(map.getZoom(),16), {animate:true});
+    const m=markers[s.id||s.name];
+    if(m){ m.setStyle({weight:3,color:'#b2472f'}); setTimeout(()=>m.setStyle({weight:s.unconfirmed?1.3:1.4,color:s.unconfirmed?'#8a8577':'#fff'}),1600); }
+  }
+  // 一覧のハイライト更新
+  document.querySelectorAll('.card').forEach(c=>c.classList.toggle('active',c.dataset.key===activeKey));
+}
+$('dClose').addEventListener('click',()=>{ $('detail').classList.remove('open'); activeKey=null; render(); });
+
+/* ========== タブ ========== */
+$('tabRank').addEventListener('click',()=>{state.tab='rank';$('tabRank').classList.add('on');$('tabAll').classList.remove('on');render();});
+$('tabAll').addEventListener('click',()=>{state.tab='all';$('tabAll').classList.add('on');$('tabRank').classList.remove('on');render();});
+
+/* ========== 検索モーダル ========== */
+function openSearch(){
+  $('qInput').value=state.q;
+  $('groupChips').innerHTML=GROUPS.map(g=>`<button class="chipbtn ${state.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('');
+  $('groupChips').querySelectorAll('.chipbtn').forEach(b=>b.addEventListener('click',()=>{
+    const g=b.dataset.g; if(state.groups.has(g))state.groups.delete(g);else state.groups.add(g); b.classList.toggle('on');
+  }));
+  $('rangeMin').value=Math.round(state.rmin*100); $('rangeMax').value=Math.round(state.rmax*100);
+  $('incUnconf').checked=state.incUnconf; updRangeLbl();
+  $('searchMask').classList.add('open');
+}
+function updRangeLbl(){
+  let a=+$('rangeMin').value, b=+$('rangeMax').value;
+  if(a>b){[a,b]=[b,a];}
+  $('rmin').textContent=`${a==0?'無名':''}(${(a/100).toFixed(2)})`;
+  $('rmax').textContent=`${b==100?'有名':''}(${(b/100).toFixed(2)})`;
+}
+$('rangeMin').addEventListener('input',updRangeLbl);
+$('rangeMax').addEventListener('input',updRangeLbl);
+$('searchBar').addEventListener('click',openSearch);
+$('searchX').addEventListener('click',()=>$('searchMask').classList.remove('open'));
+$('searchMask').addEventListener('click',e=>{if(e.target===$('searchMask'))$('searchMask').classList.remove('open');});
+$('searchReset').addEventListener('click',()=>{
+  state.q='';state.groups=new Set();state.rmin=0;state.rmax=1;state.incUnconf=true;
+  openSearch();
+});
+$('searchGo').addEventListener('click',()=>{
+  state.q=$('qInput').value.trim();
+  let a=+$('rangeMin').value/100, b=+$('rangeMax').value/100; if(a>b)[a,b]=[b,a];
+  state.rmin=a;state.rmax=b;state.incUnconf=$('incUnconf').checked;
+  state.tab='all';$('tabAll').classList.add('on');$('tabRank').classList.remove('on');
+  // 検索バー表示
+  const txt=$('searchTxt');
+  if(filterActive()){ txt.classList.add('on'); txt.textContent=(state.q||'条件あり')+` · ${SHRINES.filter(passFilter).length}件`; $('searchClr').style.display='block'; }
+  else { txt.classList.remove('on'); txt.textContent='名称・地域・区分でしぼり込む'; $('searchClr').style.display='none'; }
+  $('searchMask').classList.remove('open');
+  render();
+});
+$('searchClr').addEventListener('click',e=>{
+  e.stopPropagation();
+  state.q='';state.groups=new Set();state.rmin=0;state.rmax=1;state.incUnconf=true;
+  $('searchTxt').classList.remove('on');$('searchTxt').textContent='名称・地域・区分でしぼり込む';$('searchClr').style.display='none';
+  render();
+});
+
+/* ========== 出典モーダル ========== */
+$('srcBtn').addEventListener('click',()=>$('srcMask').classList.add('open'));
+$('srcX').addEventListener('click',()=>$('srcMask').classList.remove('open'));
+$('srcMask').addEventListener('click',e=>{if(e.target===$('srcMask'))$('srcMask').classList.remove('open');});
+
+/* ========== 凡例トグル（スマホ） ========== */
+$('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open'));
+
+/* ========== ボトムシート（スマホ） ========== */
+(function(){
+  const side=$('side'), handle=$('sheetHandle');
+  let dragging=false, startY=0, startH=0;
+  const snaps=()=>{const vh=window.innerHeight;return [vh*0.14, vh*0.5, vh*0.82];};
+  function setH(h){const vh=window.innerHeight;h=Math.max(vh*0.1,Math.min(vh*0.85,h));side.style.height=h+'px';}
+  handle.addEventListener('pointerdown',e=>{dragging=true;startY=e.clientY;startH=side.getBoundingClientRect().height;handle.setPointerCapture(e.pointerId);document.body.style.userSelect='none';});
+  handle.addEventListener('pointermove',e=>{if(!dragging)return;setH(startH+(startY-e.clientY));});
+  handle.addEventListener('pointerup',e=>{
+    if(!dragging)return;dragging=false;document.body.style.userSelect='';
+    const h=side.getBoundingClientRect().height, sn=snaps();
+    let near=sn.reduce((p,c)=>Math.abs(c-h)<Math.abs(p-h)?c:p);
+    // タップ（ほぼ動いていない）なら段階を循環
+    if(Math.abs(startH-h)<6){const i=sn.indexOf(sn.reduce((p,c)=>Math.abs(c-startH)<Math.abs(p-startH)?c:p));near=sn[(i+1)%sn.length];}
+    side.style.transition='height .18s';setH(near);setTimeout(()=>side.style.transition='',200);
+  });
+  window.addEventListener('resize',()=>{if(window.innerWidth>820)side.style.height='';});
+})();
+
+render();
+</script>
+</body>
+</html>

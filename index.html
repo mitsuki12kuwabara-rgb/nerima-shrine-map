@@ -480,22 +480,72 @@ $('srcMask').addEventListener('click',e=>{if(e.target===$('srcMask'))$('srcMask'
 /* ========== 凡例トグル（スマホ） ========== */
 $('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open'));
 
-/* ========== ボトムシート（スマホ） ========== */
+/* ========== ボトムシート（スマホ） ==========
+   中身（一覧）を上下にスワイプすると、その動きに連動してシートの開き具合が変化する。
+   ・シートが最大でないときに上スワイプ → シートが伸びる（一覧はまだスクロールしない）
+   ・一覧が先頭(最上部)で下スワイプ   → シートが縮む
+   ・それ以外（最大表示で上／途中から下）→ 一覧を通常スクロール
+   指を離すと最寄りの3段階にスナップ（段階は従来どおり）。            */
 (function(){
-  const side=$('side'), handle=$('sheetHandle');
-  let dragging=false, startY=0, startH=0;
+  const side=$('side'), handle=$('sheetHandle'), list=$('list');
   const snaps=()=>{const vh=window.innerHeight;return [vh*0.14, vh*0.5, vh*0.82];};
+  const FULL=()=>snaps()[2];
+  function curH(){return side.getBoundingClientRect().height;}
   function setH(h){const vh=window.innerHeight;h=Math.max(vh*0.1,Math.min(vh*0.85,h));side.style.height=h+'px';}
-  handle.addEventListener('pointerdown',e=>{dragging=true;startY=e.clientY;startH=side.getBoundingClientRect().height;handle.setPointerCapture(e.pointerId);document.body.style.userSelect='none';});
-  handle.addEventListener('pointermove',e=>{if(!dragging)return;setH(startH+(startY-e.clientY));});
+  function snapNearest(h){const sn=snaps();return sn.reduce((p,c)=>Math.abs(c-h)<Math.abs(p-h)?c:p);}
+  function animTo(h){side.style.transition='height .2s cubic-bezier(.3,.7,.3,1)';setH(h);setTimeout(()=>side.style.transition='',220);}
+
+  // --- 共通ジェスチャ（ハンドルと一覧の両方で使う） ---
+  let active=false, mode=null, startY=0, startH=0, moved=false;
+  function gestureStart(y){active=true;mode=null;moved=false;startY=y;startH=curH();side.style.transition='';}
+  function gestureMove(y, srcIsList, ev){
+    if(!active) return;
+    const dy=y-startY;            // +下 / -上
+    if(mode===null){
+      if(Math.abs(dy)<4) return;  // しきい値
+      moved=true;
+      if(!srcIsList){
+        mode='sheet';             // ハンドル操作は常にシート
+      }else{
+        const expandable=curH()<FULL()-2;
+        const atTop=list.scrollTop<=0;
+        if(dy<0 && expandable) mode='sheet';        // 上スワイプ＆まだ伸ばせる
+        else if(dy>0 && atTop)  mode='sheet';        // 下スワイプ＆一覧先頭
+        else mode='scroll';                          // 一覧の通常スクロールに任せる
+      }
+    }
+    if(mode==='sheet'){
+      if(ev&&ev.cancelable) ev.preventDefault();
+      if(srcIsList) list.scrollTop=0;
+      setH(startH - dy);          // 上に動かす(dy<0)とシートが伸びる
+    }
+  }
+  function gestureEnd(){
+    if(!active) return; active=false;
+    if(mode==='sheet'){ animTo(snapNearest(curH())); }
+    mode=null;
+  }
+
+  // --- ハンドル：ドラッグ＋タップで段階循環 ---
+  handle.addEventListener('pointerdown',e=>{gestureStart(e.clientY);handle.setPointerCapture(e.pointerId);document.body.style.userSelect='none';});
+  handle.addEventListener('pointermove',e=>{gestureMove(e.clientY,false,e);});
   handle.addEventListener('pointerup',e=>{
-    if(!dragging)return;dragging=false;document.body.style.userSelect='';
-    const h=side.getBoundingClientRect().height, sn=snaps();
-    let near=sn.reduce((p,c)=>Math.abs(c-h)<Math.abs(p-h)?c:p);
-    // タップ（ほぼ動いていない）なら段階を循環
-    if(Math.abs(startH-h)<6){const i=sn.indexOf(sn.reduce((p,c)=>Math.abs(c-startH)<Math.abs(p-startH)?c:p));near=sn[(i+1)%sn.length];}
-    side.style.transition='height .18s';setH(near);setTimeout(()=>side.style.transition='',200);
+    document.body.style.userSelect='';
+    if(active && !moved){            // タップ → 次の段階へ循環
+      active=false;mode=null;
+      const sn=snaps(), i=sn.indexOf(snapNearest(curH()));
+      animTo(sn[(i+1)%sn.length]);
+      return;
+    }
+    gestureEnd();
   });
+
+  // --- 一覧：タッチで中身スクロールとシート開閉を連動 ---
+  list.addEventListener('touchstart',e=>{gestureStart(e.touches[0].clientY);},{passive:true});
+  list.addEventListener('touchmove',e=>{gestureMove(e.touches[0].clientY,true,e);},{passive:false});
+  list.addEventListener('touchend',gestureEnd);
+  list.addEventListener('touchcancel',gestureEnd);
+
   window.addEventListener('resize',()=>{if(window.innerWidth>820)side.style.height='';});
 })();
 

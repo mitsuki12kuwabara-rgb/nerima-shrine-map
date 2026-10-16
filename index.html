@@ -333,6 +333,24 @@ SHRINES.forEach(s=>{
 });
 const AREAS=Object.keys(AREA_COUNT).sort((a,b)=>AREA_COUNT[b]-AREA_COUNT[a]);
 
+// 読み（ひらがな）辞書：ひらがな／カタカナ入力でも地域・区分の候補を出す
+const AREA_READ={
+  '石神井台':'しゃくじいだい','練馬':'ねりま','北町':'きたまち','春日町':'かすがちょう',
+  '大泉町':'おおいずみまち','高松':'たかまつ','田柄':'たがら','石神井町':'しゃくじいまち',
+  '高野台':'たかのだい','中村':'なかむら','下石神井':'しもしゃくじい','氷川台':'ひかわだい',
+  '旭町':'あさひちょう','貫井':'ぬくい','東大泉':'ひがしおおいずみ','西大泉':'にしおおいずみ',
+  '豊玉南':'とよたまみなみ','上石神井':'かみしゃくじい','土支田':'どしだ','桜台':'さくらだい',
+  '中村南':'なかむらみなみ','大泉学園町':'おおいずみがくえんちょう','谷原':'やはら','豊玉北':'とよたまきた',
+  '南大泉':'みなみおおいずみ','南田中':'みなみたなか','関町北':'せきまちきた','早宮':'はやみや',
+  '富士見台':'ふじみだい','錦':'にしき','平和台':'へいわだい','向山':'むこうやま',
+  '中村北':'なかむらきた','旭丘':'あさひがおか','小竹町':'こたけちょう','関町南':'せきまちみなみ',
+  '三原台':'みはらだい','関町東':'せきまちひがし','羽沢':'はざわ','立野町':'たてのちょう',
+  '豊玉上':'とよたまかみ','栄町':'さかえちょう'
+};
+const GROUP_READ={'神社・祠':'じんじゃほこら','寺院':'じいん','地蔵・石仏・塚':'じぞうせきぶつつか','未確認':'みかくにん','その他':'そのた'};
+// カタカナ→ひらがな正規化
+function toHira(s){return (s||'').replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));}
+
 const $=id=>document.getElementById(id);
 $('stats').innerHTML = `<span>全 <b>${STATS.total}</b> 件</span><span>確認済 ${STATS.confirmed}</span><span>未確認 ${STATS.unconfirmed}</span>`;
 
@@ -484,10 +502,12 @@ function openSearch(){
 function renderSuggest(){
   const q=$('qInput').value.trim(), box=$('qSuggest');
   if(!q){ box.classList.remove('on'); box.innerHTML=''; return; }
-  const ql=q.toLowerCase();
+  const ql=q.toLowerCase(), qh=toHira(ql);   // qh：カタカナ→ひらがな正規化した入力
   const hl=t=>{const i=t.toLowerCase().indexOf(ql); return i<0?t:t.slice(0,i)+'<b>'+t.slice(i,i+q.length)+'</b>'+t.slice(i+q.length);};
-  const grps=GROUPS.filter(g=>g.toLowerCase().includes(ql));
-  const areas=AREAS.filter(a=>a.toLowerCase().includes(ql)).slice(0,8);
+  const matchArea=a=>a.toLowerCase().includes(ql) || (AREA_READ[a]||'').includes(qh);   // 漢字 or 読み(ひらがな)
+  const matchGrp =g=>g.toLowerCase().includes(ql) || (GROUP_READ[g]||'').includes(qh);
+  const grps=GROUPS.filter(matchGrp);
+  const areas=AREAS.filter(matchArea).slice(0,8);
   let rows='';
   grps.forEach(g=>{ rows+=`<div class="srow" data-type="grp" data-val="${g}"><span class="tag grp">区分</span><span class="nm">${hl(g)}</span><span class="ct">${GROUP_COUNT[g]||0}件</span></div>`; });
   areas.forEach(a=>{ rows+=`<div class="srow" data-type="area" data-val="${a}"><span class="tag area">地域</span><span class="nm">${hl(a)}</span><span class="ct">${AREA_COUNT[a]}件</span></div>`; });

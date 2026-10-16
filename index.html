@@ -74,8 +74,8 @@
   .legToggle{position:absolute;right:12px;bottom:22px;z-index:801;display:none;background:var(--panel);border:1px solid var(--line);border-radius:50%;width:38px;height:38px;box-shadow:var(--shadow);font-size:16px}
 
   /* ===== 詳細オーバーレイ ===== */
-  .detail{position:absolute;top:0;right:0;width:400px;max-width:46%;height:100%;background:var(--panel);box-shadow:-8px 0 24px rgba(0,0,0,.12);transform:translateX(105%);transition:transform .26s cubic-bezier(.3,.7,.3,1);z-index:1100;display:flex;flex-direction:column}
-  .detail.open{transform:translateX(0)}
+  .detail{position:absolute;top:0;right:0;width:400px;max-width:46%;height:100%;background:var(--panel);box-shadow:-8px 0 24px rgba(0,0,0,.12);transform:translateX(105%);visibility:hidden;pointer-events:none;transition:transform .26s cubic-bezier(.3,.7,.3,1),visibility 0s .26s;z-index:1100;display:flex;flex-direction:column}
+  .detail.open{transform:translateX(0);visibility:visible;pointer-events:auto;transition:transform .26s cubic-bezier(.3,.7,.3,1),visibility 0s 0s}
   .dhead{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
   .dhead .dclose{margin-left:auto;border:none;background:#f1ece2;border-radius:50%;width:30px;height:30px;font-size:16px;color:#6b6358;flex:none}
   .dbody{flex:1;overflow:auto;padding:16px}
@@ -132,7 +132,7 @@
     .legToggle{display:flex;align-items:center;justify-content:center}
     .legend{display:none;bottom:70px;right:12px}
     .legend.open{display:block}
-    .detail{width:100%;max-width:100%;transform:translateY(100%);transition:transform .26s}
+    .detail{position:fixed;inset:0;width:100%;max-width:100%;transform:translateY(100%);transition:transform .26s,visibility 0s .26s}
     .detail.open{transform:translateY(0)}
     .srcbtn{padding:4px 9px}
   }
@@ -495,56 +495,53 @@ $('legToggle').addEventListener('click',()=>$('legend').classList.toggle('open')
   function snapNearest(h){const sn=snaps();return sn.reduce((p,c)=>Math.abs(c-h)<Math.abs(p-h)?c:p);}
   function animTo(h){side.style.transition='height .2s cubic-bezier(.3,.7,.3,1)';setH(h);setTimeout(()=>side.style.transition='',220);}
 
-  // --- 共通ジェスチャ（ハンドルと一覧の両方で使う） ---
-  let active=false, mode=null, startY=0, startH=0, moved=false;
-  function gestureStart(y){active=true;mode=null;moved=false;startY=y;startH=curH();side.style.transition='';}
-  function gestureMove(y, srcIsList, ev){
+  let active=false, mode=null, startY=0, startH=0, moved=false, inList=false, onHandle=false;
+  function start(y,target){
+    active=true;mode=null;moved=false;startY=y;startH=curH();side.style.transition='';
+    inList  = !!(target&&target.closest&&target.closest('#list'));
+    onHandle= !!(target&&target.closest&&target.closest('#sheetHandle'));
+  }
+  function move(y,ev){
     if(!active) return;
-    const dy=y-startY;            // +下 / -上
+    const dy=y-startY;              // +下 / -上
     if(mode===null){
-      if(Math.abs(dy)<4) return;  // しきい値
+      if(Math.abs(dy)<4) return;    // しきい値
       moved=true;
-      if(!srcIsList){
-        mode='sheet';             // ハンドル操作は常にシート
+      if(!inList){
+        mode='sheet';              // ヘッダー・検索・タブ・ハンドル上 → 常にシート操作
       }else{
-        const expandable=curH()<FULL()-2;
-        const atTop=list.scrollTop<=0;
-        if(dy<0 && expandable) mode='sheet';        // 上スワイプ＆まだ伸ばせる
-        else if(dy>0 && atTop)  mode='sheet';        // 下スワイプ＆一覧先頭
-        else mode='scroll';                          // 一覧の通常スクロールに任せる
+        const expandable=curH()<FULL()-2, atTop=list.scrollTop<=0;
+        if(dy<0 && expandable) mode='sheet';     // 上スワイプ＆まだ伸ばせる
+        else if(dy>0 && atTop) mode='sheet';     // 下スワイプ＆一覧先頭
+        else mode='scroll';                       // 一覧の通常スクロールに任せる
       }
     }
     if(mode==='sheet'){
       if(ev&&ev.cancelable) ev.preventDefault();
-      if(srcIsList) list.scrollTop=0;
-      setH(startH - dy);          // 上に動かす(dy<0)とシートが伸びる
+      if(inList) list.scrollTop=0;
+      setH(startH - dy);            // 上に動かす(dy<0)とシートが伸びる
     }
   }
-  function gestureEnd(){
-    if(!active) return; active=false;
-    if(mode==='sheet'){ animTo(snapNearest(curH())); }
+  function end(){
+    if(!active) return; active=false; document.body.style.userSelect='';
+    if(!moved && onHandle){         // ハンドルのタップ → 段階を循環
+      const sn=snaps(), i=sn.indexOf(snapNearest(curH()));
+      animTo(sn[(i+1)%sn.length]); mode=null; return;
+    }
+    if(mode==='sheet') animTo(snapNearest(curH()));
     mode=null;
   }
 
-  // --- ハンドル：ドラッグ＋タップで段階循環 ---
-  handle.addEventListener('pointerdown',e=>{gestureStart(e.clientY);handle.setPointerCapture(e.pointerId);document.body.style.userSelect='none';});
-  handle.addEventListener('pointermove',e=>{gestureMove(e.clientY,false,e);});
-  handle.addEventListener('pointerup',e=>{
-    document.body.style.userSelect='';
-    if(active && !moved){            // タップ → 次の段階へ循環
-      active=false;mode=null;
-      const sn=snaps(), i=sn.indexOf(snapNearest(curH()));
-      animTo(sn[(i+1)%sn.length]);
-      return;
-    }
-    gestureEnd();
-  });
+  // シート全体でスワイプを拾う（連動範囲を広く：ヘッダー〜一覧のどこでもOK）
+  side.addEventListener('touchstart',e=>{start(e.touches[0].clientY, e.target);},{passive:true});
+  side.addEventListener('touchmove',e=>{move(e.touches[0].clientY, e);},{passive:false});
+  side.addEventListener('touchend',end);
+  side.addEventListener('touchcancel',end);
 
-  // --- 一覧：タッチで中身スクロールとシート開閉を連動 ---
-  list.addEventListener('touchstart',e=>{gestureStart(e.touches[0].clientY);},{passive:true});
-  list.addEventListener('touchmove',e=>{gestureMove(e.touches[0].clientY,true,e);},{passive:false});
-  list.addEventListener('touchend',gestureEnd);
-  list.addEventListener('touchcancel',gestureEnd);
+  // マウス環境（細い画面）向け：ハンドルのドラッグ／タップ
+  handle.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'){start(e.clientY,handle);handle.setPointerCapture(e.pointerId);document.body.style.userSelect='none';}});
+  handle.addEventListener('pointermove',e=>{if(e.pointerType==='mouse')move(e.clientY,e);});
+  handle.addEventListener('pointerup',e=>{if(e.pointerType==='mouse')end();});
 
   window.addEventListener('resize',()=>{if(window.innerWidth>820)side.style.height='';});
 })();

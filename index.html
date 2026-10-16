@@ -10,7 +10,7 @@
     --bg:#f6f4ef; --panel:#fffdf8; --ink:#2b2824; --sub:#7a736a; --line:#e7e1d6;
     --accent:#b2472f; --accent2:#c98a1a; --gold:#c98a1a;
     --shadow:0 6px 24px rgba(60,50,40,.14);
-    --c-unknown:#8e9bb0; --c-mid:#e0a106; --c-fame:#c43a2b; --c-unconf:#b7b2a8;
+    --c-unknown:#7e22ce; --c-mid:#b5179e; --c-fame:#dc2626; --c-unconf:#b7b2a8;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%}
@@ -245,7 +245,7 @@
 /* ========== 知名度 → 色 ========== */
 function lerp(a,b,t){return a+(b-a)*t}
 function hex(c){return '#'+c.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('')}
-const C_LOW=[142,155,176], C_MID=[224,161,6], C_HIGH=[196,58,43];
+const C_LOW=[126,34,206], C_MID=[181,23,158], C_HIGH=[220,38,38];
 function fameColor(v){
   if(v==null) return getComputedStyle(document.documentElement).getPropertyValue('--c-unconf').trim()||'#b7b2a8';
   // 0.15〜1.0 を 0〜1 に正規化

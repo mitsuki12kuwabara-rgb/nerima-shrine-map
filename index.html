@@ -109,6 +109,18 @@
   .fgroup{margin-bottom:18px}
   .fgroup label{font-size:12px;font-weight:700;color:var(--ink);display:block;margin-bottom:8px}
   .tinput{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px 13px;font-size:15px;background:#fff}
+  .suggest{margin-top:6px;border:1px solid var(--line);border-radius:11px;background:#fff;overflow:hidden;display:none;max-height:260px;overflow-y:auto}
+  .suggest.on{display:block}
+  .suggest .srow{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #f1ece2;cursor:pointer}
+  .suggest .srow:last-child{border-bottom:none}
+  .suggest .srow:hover,.suggest .srow:active{background:#faf6ef}
+  .suggest .tag{flex:none;font-size:10.5px;font-weight:700;color:#fff;border-radius:6px;padding:2px 7px}
+  .suggest .tag.area{background:#6b7a90}
+  .suggest .tag.grp{background:var(--accent)}
+  .suggest .nm{flex:1;font-size:14px;color:var(--ink)}
+  .suggest .nm b{color:var(--accent)}
+  .suggest .ct{flex:none;font-size:11px;color:var(--sub)}
+  .suggest .empty{padding:12px;font-size:12.5px;color:var(--sub);text-align:center}
   .chips{display:flex;flex-wrap:wrap;gap:8px}
   .chipbtn{border:1px solid var(--line);background:#fff;border-radius:20px;padding:8px 14px;font-size:13px;color:var(--sub)}
   .chipbtn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
@@ -213,8 +225,9 @@
     <div class="mhead"><h2>しぼり込み</h2><button class="x" id="searchX">×</button></div>
     <div class="mbody">
       <div class="fgroup">
-        <label>キーワード（名称・住所）</label>
-        <input class="tinput" id="qInput" type="search" placeholder="例：氷川、石神井、稲荷">
+        <label>キーワード（名称・地域・区分）</label>
+        <input class="tinput" id="qInput" type="search" placeholder="例：氷川、石神井、稲荷" autocomplete="off">
+        <div class="suggest" id="qSuggest"></div>
       </div>
       <div class="fgroup">
         <label>種別</label>
@@ -306,6 +319,19 @@ SHRINES.forEach(s=>{
 let state={tab:'rank', q:'', groups:new Set(), rmin:0, rmax:1, incUnconf:true};
 const GROUPS=['神社・祠','寺院','地蔵・石仏・塚','未確認','その他'];
 let activeKey=null;
+
+/* ===== 検索候補用：地域(町名)・区分の集計 ===== */
+function areaOf(addr){
+  let a=(addr||'').replace(/^東京都/,'').replace(/^練馬区/,'');
+  const m=a.match(/^[^0-9０-９]+/);         // 丁目・番地の数字より前＝町名
+  return m?m[0].replace(/[\s　]+$/,''):'';
+}
+const AREA_COUNT={}, GROUP_COUNT={};
+SHRINES.forEach(s=>{
+  const a=areaOf(s.addr); if(a) AREA_COUNT[a]=(AREA_COUNT[a]||0)+1;
+  GROUP_COUNT[s.group]=(GROUP_COUNT[s.group]||0)+1;
+});
+const AREAS=Object.keys(AREA_COUNT).sort((a,b)=>AREA_COUNT[b]-AREA_COUNT[a]);
 
 const $=id=>document.getElementById(id);
 $('stats').innerHTML = `<span>全 <b>${STATS.total}</b> 件</span><span>確認済 ${STATS.confirmed}</span><span>未確認 ${STATS.unconfirmed}</span>`;
@@ -450,8 +476,35 @@ function openSearch(){
   }));
   $('rangeMin').value=Math.round(state.rmin*100); $('rangeMax').value=Math.round(state.rmax*100);
   $('incUnconf').checked=state.incUnconf; updRangeLbl();
+  $('qSuggest').classList.remove('on'); $('qSuggest').innerHTML='';
   $('searchMask').classList.add('open');
 }
+
+/* ===== 入力中の候補（地域・区分）===== */
+function renderSuggest(){
+  const q=$('qInput').value.trim(), box=$('qSuggest');
+  if(!q){ box.classList.remove('on'); box.innerHTML=''; return; }
+  const ql=q.toLowerCase();
+  const hl=t=>{const i=t.toLowerCase().indexOf(ql); return i<0?t:t.slice(0,i)+'<b>'+t.slice(i,i+q.length)+'</b>'+t.slice(i+q.length);};
+  const grps=GROUPS.filter(g=>g.toLowerCase().includes(ql));
+  const areas=AREAS.filter(a=>a.toLowerCase().includes(ql)).slice(0,8);
+  let rows='';
+  grps.forEach(g=>{ rows+=`<div class="srow" data-type="grp" data-val="${g}"><span class="tag grp">区分</span><span class="nm">${hl(g)}</span><span class="ct">${GROUP_COUNT[g]||0}件</span></div>`; });
+  areas.forEach(a=>{ rows+=`<div class="srow" data-type="area" data-val="${a}"><span class="tag area">地域</span><span class="nm">${hl(a)}</span><span class="ct">${AREA_COUNT[a]}件</span></div>`; });
+  box.innerHTML = rows || `<div class="empty">一致する地域・区分なし（このまま名称で検索できます）</div>`;
+  box.classList.add('on');
+  box.querySelectorAll('.srow').forEach(r=>r.addEventListener('click',()=>{
+    const t=r.dataset.type, v=r.dataset.val;
+    if(t==='grp'){                       // 区分候補 → その区分だけで絞り込み
+      state.groups=new Set([v]); $('qInput').value='';
+      $('groupChips').querySelectorAll('.chipbtn').forEach(b=>b.classList.toggle('on', b.dataset.g===v));
+    }else{                               // 地域候補 → 住所キーワードとして適用
+      $('qInput').value=v;
+    }
+    box.classList.remove('on'); applySearch();
+  }));
+}
+$('qInput').addEventListener('input',renderSuggest);
 function updRangeLbl(){
   let a=+$('rangeMin').value, b=+$('rangeMax').value;
   if(a>b){[a,b]=[b,a];}
@@ -467,7 +520,7 @@ $('searchReset').addEventListener('click',()=>{
   state.q='';state.groups=new Set();state.rmin=0;state.rmax=1;state.incUnconf=true;
   openSearch();
 });
-$('searchGo').addEventListener('click',()=>{
+function applySearch(){
   state.q=$('qInput').value.trim();
   let a=+$('rangeMin').value/100, b=+$('rangeMax').value/100; if(a>b)[a,b]=[b,a];
   state.rmin=a;state.rmax=b;state.incUnconf=$('incUnconf').checked;
@@ -476,9 +529,11 @@ $('searchGo').addEventListener('click',()=>{
   const txt=$('searchTxt');
   if(filterActive()){ txt.classList.add('on'); txt.textContent=(state.q||'条件あり')+` · ${SHRINES.filter(passFilter).length}件`; $('searchClr').style.display='block'; }
   else { txt.classList.remove('on'); txt.textContent='名称・地域・区分でしぼり込む'; $('searchClr').style.display='none'; }
+  $('qSuggest').classList.remove('on');
   $('searchMask').classList.remove('open');
   render();
-});
+}
+$('searchGo').addEventListener('click',applySearch);
 $('searchClr').addEventListener('click',e=>{
   e.stopPropagation();
   state.q='';state.groups=new Set();state.rmin=0;state.rmax=1;state.incUnconf=true;
